@@ -77,13 +77,21 @@ ZBUS_CHAN_DEFINE(hard_chan,       /* Name */
 		 ZBUS_MSG_INIT(0)      /* Initial value major 0, minor 1, build 1023 */
 );
 
-ZBUS_CHAN_DEFINE(stuck_chan,      /* Name */
+ZBUS_CHAN_DEFINE(stuck1_chan,     /* Name */
 		 struct hard_msg, /* Message type */
 
 		 hard_msg_validator,   /* Validator */
 		 NULL,                 /* User data */
 		 ZBUS_OBSERVERS_EMPTY, /* observers */
 		 ZBUS_MSG_INIT(0)      /* Initial value major 0, minor 1, build 1023 */
+);
+
+ZBUS_CHAN_DEFINE(stuck2_chan,          /* Name */
+		 int,                  /* Message type */
+		 NULL,                 /* Validator */
+		 NULL,                 /* User data */
+		 ZBUS_OBSERVERS_EMPTY, /* observers */
+		 ZBUS_MSG_INIT(0)      /* Initial value */
 );
 
 static int count_fast;
@@ -284,12 +292,12 @@ ZTEST(basic, test_specification_based__zbus_chan)
 
 	k_msleep(100);
 
-	zassert_equal(0, zbus_chan_add_obs(&stuck_chan, &sub1, K_MSEC(200)), NULL);
+	zassert_equal(0, zbus_chan_add_obs(&stuck1_chan, &sub1, K_MSEC(200)), NULL);
 
-	zassert_equal(0, zbus_chan_notify(&stuck_chan, K_MSEC(200)), "It must finish correctly");
+	zassert_equal(0, zbus_chan_notify(&stuck1_chan, K_MSEC(200)), "It must finish correctly");
 
-	zassert_equal(-EAGAIN, zbus_chan_notify(&stuck_chan, K_MSEC(200)),
-		      "It must get stuck on the stuck_chan since it only has 1 occupied spot at "
+	zassert_equal(-EAGAIN, zbus_chan_notify(&stuck1_chan, K_MSEC(200)),
+		      "It must get stuck on the stuck1_chan since it only has 1 occupied spot at "
 		      "the msgq");
 
 	/* Trying to call the zbus functions in a ISR context. None must work */
@@ -353,9 +361,12 @@ static bool check_chan_iterator(const struct zbus_channel *chan, void *user_data
 		zassert_mem_equal__(zbus_chan_name(chan), "hard_chan", 9, "Must be equal");
 		break;
 	case 5:
-		zassert_mem_equal__(zbus_chan_name(chan), "stuck_chan", 10, "Must be equal");
+		zassert_mem_equal__(zbus_chan_name(chan), "stuck1_chan", 10, "Must be equal");
 		break;
 	case 6:
+		zassert_mem_equal__(zbus_chan_name(chan), "stuck2_chan", 11, "Must be equal");
+		break;
+	case 7:
 		zassert_mem_equal__(zbus_chan_name(chan), "version_chan", 12, "Must be equal");
 		break;
 	default:
@@ -388,6 +399,10 @@ static bool check_obs_iterator(const struct zbus_observer *obs, void *user_data)
 	case 4:
 		zassert_mem_equal__(zbus_obs_name(obs), "sub1", 4, "Must be equal");
 		break;
+	case 5:
+		zassert_mem_equal__(zbus_obs_name(obs), "sub2", 4, "Must be equal");
+		break;
+
 	default:
 		zassert_unreachable(NULL);
 	}
@@ -630,6 +645,17 @@ ZTEST(basic, test_specification_based__zbus_sub_wait)
 	zassert_equal(-ENOMSG, zbus_sub_wait(&foo_sub, &chan, K_NO_WAIT), NULL);
 
 	irq_offload(isr_sub_wait, NULL);
+}
+
+ZBUS_SUBSCRIBER_DEFINE(sub2, 1);
+ZBUS_CHAN_ADD_OBS(stuck2_chan, sub2, 1);
+
+ZTEST(basic, test_zbus_pub_chan_static_subscriber_queue_full)
+{
+	int msg = 42;
+	zassert_ok(zbus_chan_pub(&stuck2_chan, &msg, K_NO_WAIT));
+	zassert_equal(-ENOMSG, zbus_chan_pub(&stuck2_chan, &msg, K_NO_WAIT));
+	zassert_equal(-EAGAIN, zbus_chan_pub(&stuck2_chan, &msg, K_MSEC(1)));
 }
 
 ZTEST_SUITE(basic, NULL, NULL, NULL, NULL, NULL);
