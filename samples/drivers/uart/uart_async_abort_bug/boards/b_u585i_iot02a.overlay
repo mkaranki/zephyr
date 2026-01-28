@@ -1,0 +1,26 @@
+/*
+ * Copyright (c) 2026 Vaisala Oyj
+ *
+ * SPDX-License-Identifier: Apache-2.0
+ */
+
+/ {
+    aliases {
+        test-uart = &usart2;
+    };
+};
+
+/*
+ * Use USART2 for testing (not the console USART1)
+ * This allows monitoring the test progress on the console
+ * while exercising the bug on a separate UART
+ */
+&usart2 {
+    status = "okay";
+    pinctrl-0 = <&usart2_tx_pd5 &usart2_rx_pd6>;
+    pinctrl-names = "default";
+    current-speed = <19200>;
+    dmas = <&gpdma1 5 27 STM32_DMA_PERIPH_TX>,
+           <&gpdma1 4 26 STM32_DMA_PERIPH_RX>;
+    dma-names = "tx", "rx";
+};
